@@ -1,0 +1,39 @@
+﻿@model List<TempMailX.Models.TempEmail>
+@{
+    Layout = "_Layout";
+}
+
+<h3 class="mb-3">
+    📥 Temp Mail Inbox
+</h3>
+
+<table class="table table-bordered table-hover shadow-sm bg-white">
+    <thead class="table-dark">
+        <tr>
+            <th>ID</th>
+            <th>Email</th>
+            <th>Created</th>
+            <th>Expiry</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+
+    <tbody>
+        @foreach (var e in Model)
+        {
+            <tr>
+                <td>@e.Id</td>
+                <td class="fw-bold">@e.EmailAddress</td>
+                <td>@e.CreatedAt</td>
+                <td>@e.ExpiryAt</td>
+                <td>
+                    <a href="/Mail/Deactivate/@e.Id"
+                       class="btn btn-danger btn-sm"
+                       onclick="return confirm('Deactivate this email?')">
+                        ❌ Deactivate
+                    </a>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
