@@ -5,22 +5,19 @@ namespace TempMailX.Background
 {
     public class EmailExpiryService : BackgroundService
     {
-        private readonly IServiceScopeFactory _scopeFactory;
+        private readonly TempEmailDAL _dal;
 
-        public EmailExpiryService(IServiceScopeFactory scopeFactory)
+        // DI through constructor
+        public EmailExpiryService(TempEmailDAL dal)
         {
-            _scopeFactory = scopeFactory;
+            _dal = dal;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             while (!stoppingToken.IsCancellationRequested)
             {
-                using var scope = _scopeFactory.CreateScope();
-                var dal = new TempEmailDAL();
-                dal.ExpireOldEmails();
-
-                // run every 1 minute
+                _dal.ExpireOldEmails();
                 await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
             }
         }

@@ -1,79 +1,106 @@
-﻿using Microsoft.Data.SqlClient;
+﻿using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Configuration;
 using TempMailX.Models;
 
 namespace TempMailX.Data
 {
     public class TempEmailDAL
     {
-        string cs =
-        "Data Source=(LocalDB)\\MSSQLLocalDB;Integrated Security=True";
+        private readonly string _connection;
 
-        public void SaveEmail(string email)
+        public TempEmailDAL(string connection)
         {
-            using SqlConnection conn = new SqlConnection(cs);
-            conn.Open();
+            _connection = connection;
+            CreateTable();
+        }
 
-            string q = @"INSERT INTO dbo.TempEmails
-             (EmailAddress, CreatedAt, ExpiryAt, IsActive)
-             VALUES (@e, GETDATE(), DATEADD(minute,30,GETDATE()), 1)";
+        private void CreateTable()
+        {
+            using var con = new SqliteConnection(_connection);
+            con.Open();
 
-
-            SqlCommand cmd = new SqlCommand(q, conn);
-            cmd.Parameters.AddWithValue("@e", email);
+            var cmd = con.CreateCommand();
+            cmd.CommandText = """
+                CREATE TABLE IF NOT EXISTS TempEmails (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    EmailAddress TEXT,
+                    CreatedAt TEXT,
+                    ExpiryAt TEXT,
+                    IsActive INTEGER
+                );
+            """;
             cmd.ExecuteNonQuery();
         }
+
+        //  Save Email
+        public void SaveEmail(string email)
+        {
+            using var con = new SqliteConnection(_connection);
+            con.Open();
+
+            var cmd = con.CreateCommand();
+            cmd.CommandText = @"
+            INSERT INTO TempEmails (EmailAddress, CreatedAt, ExpiryAt, IsActive)
+            VALUES ($email, $created, $expiry, 1);";
+
+            cmd.Parameters.AddWithValue("$email", email);
+            cmd.Parameters.AddWithValue("$created", DateTime.Now.ToString());
+            cmd.Parameters.AddWithValue("$expiry", DateTime.Now.AddMinutes(10).ToString());
+
+            cmd.ExecuteNonQuery();
+        }
+
+        //  Used by MailController (Inbox)
         public List<TempEmail> GetActiveEmails()
         {
-            List<TempEmail> list = new List<TempEmail>();
+            var list = new List<TempEmail>();
 
-            using SqlConnection conn = new SqlConnection(cs);
-            conn.Open();
+            using var con = new SqliteConnection(_connection);
+            con.Open();
 
-            string q = "SELECT * FROM TempEmails WHERE IsActive = 1";
-            SqlCommand cmd = new SqlCommand(q, conn);
-            SqlDataReader dr = cmd.ExecuteReader();
+            var cmd = con.CreateCommand();
+            cmd.CommandText = "SELECT * FROM TempEmails WHERE IsActive = 1";
 
-            while (dr.Read())
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
             {
                 list.Add(new TempEmail
                 {
-                    Id = (int)dr["Id"],
-                    EmailAddress = dr["EmailAddress"].ToString(),
-                    CreatedAt = (DateTime)dr["CreatedAt"],
-                    ExpiryAt = (DateTime)dr["ExpiryAt"],
-                    IsActive = (bool)dr["IsActive"]
+                    Id = reader.GetInt32(0),
+                    EmailAddress = reader.GetString(1),
+                    CreatedAt = DateTime.Parse(reader.GetString(2)),
+                    ExpiryAt = DateTime.Parse(reader.GetString(3)),
+                    IsActive = reader.GetInt32(4) == 1
                 });
             }
+
             return list;
         }
+
+        //  Used by MailController (Deactivate)
         public void DeactivateEmail(int id)
         {
-            using SqlConnection conn = new SqlConnection(cs);
-            conn.Open();
+            using var con = new SqliteConnection(_connection);
+            con.Open();
 
-            string q = "UPDATE TempEmails SET IsActive = 0 WHERE Id = @id";
-            SqlCommand cmd = new SqlCommand(q, conn);
-            cmd.Parameters.AddWithValue("@id", id);
-
+            var cmd = con.CreateCommand();
+            cmd.CommandText = "UPDATE TempEmails SET IsActive = 0 WHERE Id = $id";
+            cmd.Parameters.AddWithValue("$id", id);
             cmd.ExecuteNonQuery();
         }
+
+        // Used by Background Service
         public void ExpireOldEmails()
         {
-            using SqlConnection conn = new SqlConnection(cs);
-            conn.Open();
+            using var con = new SqliteConnection(_connection);
+            con.Open();
 
-            string q = @"
-        UPDATE TempEmails
-        SET IsActive = 0
-        WHERE IsActive = 1 AND ExpiryAt < GETDATE()";
-
-            SqlCommand cmd = new SqlCommand(q, conn);
+            var cmd = con.CreateCommand();
+            cmd.CommandText = @"
+            UPDATE TempEmails
+            SET IsActive = 0
+            WHERE datetime(ExpiryAt) <= datetime('now')";
             cmd.ExecuteNonQuery();
         }
-
-
-
-
-
     }
 }
